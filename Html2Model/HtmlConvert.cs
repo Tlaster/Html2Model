@@ -106,8 +106,6 @@ namespace Html2Model
                         if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern) && !string.IsNullOrEmpty(text))
                             text = Regex.Match(text, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
                         targetValue = Convert.ChangeType(text, itemType);
-                        if (converter != null)
-                            targetValue = converter.ReadHtml(value, itemType, targetValue);
                         break;
                     case TypeCode.DBNull:
                     case TypeCode.Empty:
@@ -116,6 +114,8 @@ namespace Html2Model
                         targetValue = DeserializeObject(value, itemType);
                         break;
                 }
+                if (converter != null)
+                    targetValue = converter.ReadHtml(value, itemType, targetValue);
                 list.Add(targetValue);
             }
             var targetEnumerable = typeof(Enumerable)
@@ -175,8 +175,6 @@ namespace Html2Model
                     if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern))
                         value = Regex.Match(value, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
                     targetValue = Convert.ChangeType(value, propertyInfo.PropertyType);
-                    if (converter != null)
-                        targetValue = converter.ReadHtml(tuple.Element, propertyInfo.PropertyType, targetValue);
                     break;
                 case TypeCode.DBNull:
                 case TypeCode.Empty:
@@ -185,10 +183,12 @@ namespace Html2Model
                     targetValue = DeserializeObject(tuple.Element, propertyInfo.PropertyType);
                     break;
             }
+            if (converter != null)
+                targetValue = converter.ReadHtml(tuple.Element, propertyInfo.PropertyType, targetValue);
             propertyInfo.SetValue(instance, targetValue);
         }
 
-        private static IHtmlConverter CheckForConverter(PropertyInfo propertyInfo)
+        private static IHtmlConverter CheckForConverter(MemberInfo propertyInfo)
         {
             if (!Attribute.IsDefined(propertyInfo, typeof(HtmlConverterAttribute))) return null;
             if (CreateInstance(propertyInfo.GetCustomAttribute<HtmlConverterAttribute>().ConverterType) is
@@ -196,15 +196,6 @@ namespace Html2Model
                 return converter;
             return null;
         }
-
-        //private static void CheckForConverter(PropertyInfo propertyInfo, ref object targetValue, INode element)
-        //{
-        //    if (!Attribute.IsDefined(propertyInfo, typeof(HtmlConverterAttribute))) return;
-        //    if (CreateInstance(propertyInfo.GetCustomAttribute<HtmlConverterAttribute>().ConverterType) is IHtmlConverter converter)
-        //    {
-        //        targetValue = converter.ReadHtml(element, propertyInfo.PropertyType, targetValue);
-        //    }
-        //}
 
         private static (IElement Element, IHtmlItem HtmlItem) GetFirstOfDefaultNode(IParentNode element, IEnumerable<IHtmlItem> attributes)
         {
