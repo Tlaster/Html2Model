@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Threading.Tasks;
 using Html2Model.Attributes;
+using Newtonsoft.Json;
 
 namespace Html2Model.Sample
 {
@@ -14,7 +15,10 @@ namespace Html2Model.Sample
             {
                 var html = await client.GetStringAsync("http://manhua.dmzj.com/update_1.shtml");
                 var res = HtmlConvert.DeserializeObject<DmzjModel>(html);
+                Console.WriteLine(JsonConvert.SerializeObject(res));
             }
+            Console.ReadKey();
+
         }
     }
 
@@ -32,7 +36,7 @@ namespace Html2Model.Sample
         [HtmlItem("div.picborder > a > img", Attr = "src")]
         public string Image { get; set; }
 
-        [HtmlItem(".pictextli")]
+        [HtmlItem(".pictextli", RegexPattern = "作者:([^-]+)", RegexGroup = 1)]
         public string Author { get; set; }
 
         [HtmlItem("div.pictext > ul > li:nth-child(3)")]

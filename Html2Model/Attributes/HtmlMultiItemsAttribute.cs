@@ -3,7 +3,7 @@
 namespace Html2Model.Attributes
 {
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
-    public class HtmlMultiItemsAttribute : Attribute, IHtmlPath
+    public class HtmlMultiItemsAttribute : Attribute, IHtmlItem
     {
         public HtmlMultiItemsAttribute(string path)
         {
@@ -12,5 +12,7 @@ namespace Html2Model.Attributes
 
         public string Path { get; }
         public string Attr { get; set; }
+        public string RegexPattern { get; set; }
+        public int RegexGroup { get; set; }
     }
 }

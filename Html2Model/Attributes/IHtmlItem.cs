@@ -1,8 +1,11 @@
 ﻿namespace Html2Model.Attributes
 {
-    internal interface IHtmlPath
+    internal interface IHtmlItem
     {
         string Path { get; }
         string Attr { get; set; }
+
+        string RegexPattern { get; set; }
+        int RegexGroup { get; set; }
     }
 }

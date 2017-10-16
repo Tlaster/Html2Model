@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using AngleSharp.Dom;
 using AngleSharp.Extensions;
 using AngleSharp.Parser.Html;
@@ -15,7 +15,6 @@ namespace Html2Model
 {
     public static class HtmlConvert
     {
-        
         public static T DeserializeObject<T>(string html)
         {
             var parser = new HtmlParser();
@@ -34,7 +33,7 @@ namespace Html2Model
         {
             var properties =
                 type.GetProperties()
-                .Where(item => item.CanWrite && item.CanRead);
+                    .Where(item => item.CanWrite && item.CanRead);
             var instance = Expression.Lambda<Func<object>>(
                 Expression.New(type.GetConstructor(Type.EmptyTypes))
             ).Compile()();
@@ -44,29 +43,37 @@ namespace Html2Model
                 var isHtmlMultiItems = Attribute.IsDefined(propertyInfo, typeof(HtmlMultiItemsAttribute));
                 if (!isHtmlMultiItems && !isHtmlItem)
                     continue;
-                
-                
+
+
 //                if (isHtmlMultiItems && !typeof(IEnumerable).IsAssignableFrom(propertyInfo.PropertyType))
 //                    throw new NotSupportedException($"{type.AssemblyQualifiedName}.{propertyInfo.Name} must implment IEnumerable");
 //                if (isHtmlItem && typeof(IEnumerable).IsAssignableFrom(propertyInfo.PropertyType))
 //                    throw new NotSupportedException($"{type.AssemblyQualifiedName}.{propertyInfo.Name} must not implment IEnumerable");
 //                if (isHtmlMultiItems && typeof(IDictionary).IsAssignableFrom(propertyInfo.PropertyType))
 //                    throw new NotSupportedException($"Current not support IDictionary at {type.AssemblyQualifiedName}.{propertyInfo.Name}");
-                
-                
-                var htmlPath = isHtmlItem ? propertyInfo.GetCustomAttribute<HtmlItemAttribute>() as IHtmlPath :
-                    isHtmlMultiItems ? propertyInfo.GetCustomAttribute<HtmlMultiItemsAttribute>() as IHtmlPath: null;
-                if (htmlPath == null)
+
+
+                var htmlItem = isHtmlItem
+                    ? propertyInfo.GetCustomAttribute<HtmlItemAttribute>()
+                    : isHtmlMultiItems
+                        ? propertyInfo.GetCustomAttribute<HtmlMultiItemsAttribute>() as IHtmlItem
+                        : null;
+                if (htmlItem == null)
                     throw new NullReferenceException();
-                var selector = htmlPath.Path;
-                var attr = htmlPath.Attr;
+                var selector = htmlItem.Path;
+                var attr = htmlItem.Attr;
+                var regexPattern = htmlItem.RegexPattern;
+                var regexGroup = htmlItem.RegexGroup;
+
                 if (string.IsNullOrEmpty(selector))
                     continue;
                 if (isHtmlItem)
                 {
-                    var value = string.IsNullOrEmpty(attr)
+                    var value = (string.IsNullOrEmpty(attr)
                         ? element.QuerySelector(selector).Text()
-                        : element.QuerySelector(selector).GetAttribute(attr);
+                        : element.QuerySelector(selector).GetAttribute(attr)).Trim();
+                    if (!string.IsNullOrEmpty(regexPattern))
+                        value = Regex.Match(value, regexPattern).Groups[regexGroup].Value;
                     object targetValue = null;
                     switch (Type.GetTypeCode(propertyInfo.PropertyType))
                     {
@@ -85,7 +92,7 @@ namespace Html2Model
                         case TypeCode.UInt16:
                         case TypeCode.UInt32:
                         case TypeCode.UInt64:
-                            targetValue = Convert.ChangeType(value.Trim(), propertyInfo.PropertyType);
+                            targetValue = Convert.ChangeType(value, propertyInfo.PropertyType);
                             break;
                         case TypeCode.DBNull:
                         case TypeCode.Empty:
@@ -122,9 +129,11 @@ namespace Html2Model
                             case TypeCode.UInt16:
                             case TypeCode.UInt32:
                             case TypeCode.UInt64:
-                                targetValue = Convert.ChangeType(
-                                    (string.IsNullOrEmpty(attr) ? value.Text() : value.GetAttribute(attr)).Trim(),
-                                    itemType);
+                                var text = (string.IsNullOrEmpty(attr) ? value.Text() : value.GetAttribute(attr))
+                                    .Trim();
+                                if (!string.IsNullOrEmpty(regexPattern))
+                                    text = Regex.Match(text, regexPattern).Groups[regexGroup].Value;
+                                targetValue = Convert.ChangeType(text, itemType);
                                 break;
                             case TypeCode.DBNull:
                             case TypeCode.Empty:
@@ -140,13 +149,10 @@ namespace Html2Model
                         .MakeGenericMethod(itemType)
                         .Invoke(null, new object[] {list});
                     if (propertyInfo.PropertyType.IsArray)
-                    {
                         propertyInfo.SetValue(instance, typeof(Enumerable)
                             .GetMethod("ToArray")
                             .Invoke(null, new[] {targetEnumerable}));
-                    }
                     else if (typeof(List<>).MakeGenericType(itemType) == propertyInfo.PropertyType)
-                    {
                         try
                         {
                             propertyInfo.SetValue(instance, typeof(Enumerable)
@@ -159,9 +165,7 @@ namespace Html2Model
                             Console.WriteLine(e);
                             throw;
                         }
-                    }//TODO:More types
                 }
-                
             }
             return instance;
         }
