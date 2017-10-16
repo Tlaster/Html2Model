@@ -30,14 +30,11 @@ namespace Html2Model.Sample
 
     public class ManhuaModel
     {
-        [HtmlItem(".pictextst")]
-        public string Title { get; set; }
-
+        [HtmlItem(".pictext")]
+        public ManhuaInfoModel ManhuaInfo { get; set; }
         [HtmlItem("div.picborder > a > img", Attr = "src")]
         public string Image { get; set; }
 
-        [HtmlItem(".pictextli", RegexPattern = "作者:([^-]+)", RegexGroup = 1)]
-        public string Author { get; set; }
 
         [HtmlItem("div.pictext > ul > li:nth-child(3)")]
         public string Category { get; set; }
@@ -45,10 +42,19 @@ namespace Html2Model.Sample
         [HtmlItem("div.pictext > ul > li:nth-child(4)")]
         public string Update { get; set; }
         
-        [HtmlItem("div.pictext > ul > li:nth-child(5)")]
-        public string State { get; set; }
 
         [HtmlItem(".numfont")]
         public DateTime UpdateAt { get; set; }
+    }
+
+    public class ManhuaInfoModel
+    {
+
+        [HtmlItem(".pictextst")]
+        public string Title { get; set; }
+        [HtmlItem(".pictextli", RegexPattern = "作者:([^-]+)", RegexGroup = 1)]
+        public string Author { get; set; }
+        [HtmlItem("div.pictext > ul > li:nth-child(5)")]
+        public string State { get; set; }
     }
 }
