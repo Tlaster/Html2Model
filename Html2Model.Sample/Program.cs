@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using AngleSharp.Dom;
 using Html2Model.Attributes;
 using Newtonsoft.Json;
 
@@ -22,10 +24,19 @@ namespace Html2Model.Sample
         }
     }
 
+    public class CategoryConverter : IHtmlConverter
+    {
+        public object ReadHtml(INode node, Type targetType, object existingValue)
+        {
+            return Regex.Match(existingValue + "", "分类：([^-]+)").Groups[1].Value;
+        }
+    }
     public class DmzjModel
     {
         [HtmlMultiItems(".boxdiv1")]
         public List<ManhuaModel> Manhuas { get; set; }
+        [HtmlMultiItems(".pictextst")]
+        public string[] Titles { get; set; }
     }
 
     public class ManhuaModel
@@ -36,7 +47,9 @@ namespace Html2Model.Sample
         public string Image { get; set; }
 
 
+
         [HtmlItem("div.pictext > ul > li:nth-child(3)")]
+        [HtmlConverter(typeof(CategoryConverter))]
         public string Category { get; set; }
 
         [HtmlItem("div.pictext > ul > li:nth-child(4)")]

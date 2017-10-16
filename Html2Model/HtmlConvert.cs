@@ -34,9 +34,7 @@ namespace Html2Model
             var properties =
                 type.GetProperties()
                     .Where(item => item.CanWrite && item.CanRead);
-            var instance = Expression.Lambda<Func<object>>(
-                Expression.New(type.GetConstructor(Type.EmptyTypes))
-            ).Compile()();
+            var instance = CreateInstance(type);
             foreach (var propertyInfo in properties)
             {
                 var isHtmlItem = Attribute.IsDefined(propertyInfo, typeof(HtmlItemAttribute));
@@ -63,6 +61,13 @@ namespace Html2Model
                 }
             }
             return instance;
+        }
+
+        private static object CreateInstance(Type type)
+        {
+            return Expression.Lambda<Func<object>>(
+                Expression.New(type.GetConstructor(Type.EmptyTypes))
+            ).Compile()();
         }
 
         private static void DeserializeHtmlMultiItems(ref object instance, PropertyInfo propertyInfo, IParentNode element)
@@ -100,6 +105,7 @@ namespace Html2Model
                         if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern) && !string.IsNullOrEmpty(text))
                             text = Regex.Match(text, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
                         targetValue = Convert.ChangeType(text, itemType);
+                        CheckForConverter(propertyInfo, ref targetValue, value);
                         break;
                     case TypeCode.DBNull:
                     case TypeCode.Empty:
@@ -117,6 +123,7 @@ namespace Html2Model
             if (propertyInfo.PropertyType.IsArray)
                 propertyInfo.SetValue(instance, typeof(Enumerable)
                     .GetMethod("ToArray")
+                    .MakeGenericMethod(itemType)
                     .Invoke(null, new[] { targetEnumerable }));
             else if (typeof(List<>).MakeGenericType(itemType) == propertyInfo.PropertyType)
                 try
@@ -140,7 +147,7 @@ namespace Html2Model
                 throw new NullReferenceException();
             object targetValue;
             var tuple = GetFirstOfDefaultNode(element, attributes);
-            if (tuple.Node == null || tuple.HtmlItem == null)
+            if (tuple.Element == null || tuple.HtmlItem == null)
                 return;
             switch (Type.GetTypeCode(propertyInfo.PropertyType))
             {
@@ -160,25 +167,35 @@ namespace Html2Model
                 case TypeCode.UInt32:
                 case TypeCode.UInt64:
                     var value = (string.IsNullOrEmpty(tuple.HtmlItem.Attr)
-                        ? element.QuerySelector(tuple.HtmlItem.Path).Text()
-                        : element.QuerySelector(tuple.HtmlItem.Path).GetAttribute(tuple.HtmlItem.Attr)).Trim();
+                        ? tuple.Element.Text()
+                        : tuple.Element.GetAttribute(tuple.HtmlItem.Attr)).Trim();
                     if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern))
                         value = Regex.Match(value, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
                     targetValue = Convert.ChangeType(value, propertyInfo.PropertyType);
+                    CheckForConverter(propertyInfo, ref targetValue, tuple.Element);
                     break;
                 case TypeCode.DBNull:
                 case TypeCode.Empty:
                     throw new NotSupportedException();
                 default:
-                    targetValue = DeserializeObject(tuple.Node, propertyInfo.PropertyType);
+                    targetValue = DeserializeObject(tuple.Element, propertyInfo.PropertyType);
                     break;
             }
             propertyInfo.SetValue(instance, targetValue);
         }
 
-        private static (IParentNode Node, IHtmlItem HtmlItem) GetFirstOfDefaultNode(IParentNode element, IEnumerable<IHtmlItem> attributes)
+        private static void CheckForConverter(PropertyInfo propertyInfo, ref object targetValue, INode element)
         {
-            IParentNode node = null;
+            if (!Attribute.IsDefined(propertyInfo, typeof(HtmlConverterAttribute))) return;
+            if (CreateInstance(propertyInfo.GetCustomAttribute<HtmlConverterAttribute>().ConverterType) is IHtmlConverter converter)
+            {
+                targetValue = converter.ReadHtml(element, propertyInfo.PropertyType, targetValue);
+            }
+        }
+
+        private static (IElement Element, IHtmlItem HtmlItem) GetFirstOfDefaultNode(IParentNode element, IEnumerable<IHtmlItem> attributes)
+        {
+            IElement node = null;
             IHtmlItem htmlItem = null;
             foreach (var attribute in attributes)
             {
