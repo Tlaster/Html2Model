@@ -81,6 +81,7 @@ namespace Html2Model
             var itemType = ReflectionHelper.GetCollectionItemType(propertyInfo.PropertyType);
             if (itemType == null) return;
             var list = new List<object>();
+            var converter = CheckForConverter(propertyInfo);
             foreach (var value in tuple.Elements)
             {
                 object targetValue = null;
@@ -105,7 +106,8 @@ namespace Html2Model
                         if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern) && !string.IsNullOrEmpty(text))
                             text = Regex.Match(text, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
                         targetValue = Convert.ChangeType(text, itemType);
-                        CheckForConverter(propertyInfo, ref targetValue, value);
+                        if (converter != null)
+                            targetValue = converter.ReadHtml(value, itemType, targetValue);
                         break;
                     case TypeCode.DBNull:
                     case TypeCode.Empty:
@@ -149,6 +151,7 @@ namespace Html2Model
             var tuple = GetFirstOfDefaultNode(element, attributes);
             if (tuple.Element == null || tuple.HtmlItem == null)
                 return;
+            var converter = CheckForConverter(propertyInfo);
             switch (Type.GetTypeCode(propertyInfo.PropertyType))
             {
                 case TypeCode.Boolean:
@@ -172,7 +175,8 @@ namespace Html2Model
                     if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern))
                         value = Regex.Match(value, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
                     targetValue = Convert.ChangeType(value, propertyInfo.PropertyType);
-                    CheckForConverter(propertyInfo, ref targetValue, tuple.Element);
+                    if (converter != null)
+                        targetValue = converter.ReadHtml(tuple.Element, propertyInfo.PropertyType, targetValue);
                     break;
                 case TypeCode.DBNull:
                 case TypeCode.Empty:
@@ -184,14 +188,23 @@ namespace Html2Model
             propertyInfo.SetValue(instance, targetValue);
         }
 
-        private static void CheckForConverter(PropertyInfo propertyInfo, ref object targetValue, INode element)
+        private static IHtmlConverter CheckForConverter(PropertyInfo propertyInfo)
         {
-            if (!Attribute.IsDefined(propertyInfo, typeof(HtmlConverterAttribute))) return;
-            if (CreateInstance(propertyInfo.GetCustomAttribute<HtmlConverterAttribute>().ConverterType) is IHtmlConverter converter)
-            {
-                targetValue = converter.ReadHtml(element, propertyInfo.PropertyType, targetValue);
-            }
+            if (!Attribute.IsDefined(propertyInfo, typeof(HtmlConverterAttribute))) return null;
+            if (CreateInstance(propertyInfo.GetCustomAttribute<HtmlConverterAttribute>().ConverterType) is
+                IHtmlConverter converter)
+                return converter;
+            return null;
         }
+
+        //private static void CheckForConverter(PropertyInfo propertyInfo, ref object targetValue, INode element)
+        //{
+        //    if (!Attribute.IsDefined(propertyInfo, typeof(HtmlConverterAttribute))) return;
+        //    if (CreateInstance(propertyInfo.GetCustomAttribute<HtmlConverterAttribute>().ConverterType) is IHtmlConverter converter)
+        //    {
+        //        targetValue = converter.ReadHtml(element, propertyInfo.PropertyType, targetValue);
+        //    }
+        //}
 
         private static (IElement Element, IHtmlItem HtmlItem) GetFirstOfDefaultNode(IParentNode element, IEnumerable<IHtmlItem> attributes)
         {

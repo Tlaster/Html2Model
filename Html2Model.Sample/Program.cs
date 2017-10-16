@@ -31,11 +31,20 @@ namespace Html2Model.Sample
             return Regex.Match(existingValue + "", "分类：([^-]+)").Groups[1].Value;
         }
     }
+    public class TitlesConverter : IHtmlConverter
+    {
+        public object ReadHtml(INode node, Type targetType, object existingValue)
+        {
+            return existingValue + " Converter";
+        }
+    }
+
     public class DmzjModel
     {
         [HtmlMultiItems(".boxdiv1")]
         public List<ManhuaModel> Manhuas { get; set; }
         [HtmlMultiItems(".pictextst")]
+        [HtmlConverter(typeof(TitlesConverter))]
         public string[] Titles { get; set; }
     }
 
