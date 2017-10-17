@@ -15,6 +15,7 @@ namespace Html2Model
 {
     public static class HtmlConvert
     {
+
         public static T DeserializeObject<T>(string html)
         {
             var parser = new HtmlParser();
@@ -31,6 +32,8 @@ namespace Html2Model
 
         private static object DeserializeObject(IParentNode element, Type type)
         {
+            if (!type.IsClass)
+                return null;
             var properties =
                 type.GetProperties()
                     .Where(item => item.CanWrite && item.CanRead);
@@ -50,15 +53,14 @@ namespace Html2Model
 //                if (isHtmlMultiItems && typeof(IDictionary).IsAssignableFrom(propertyInfo.PropertyType))
 //                    throw new NotSupportedException($"Current not support IDictionary at {type.AssemblyQualifiedName}.{propertyInfo.Name}");
 
-
+                object propertyValue = null;
+                
                 if (isHtmlItem)
-                {
-                    DeserializeHtmlItem(ref instance, propertyInfo, element);
-                }
+                    propertyValue = DeserializeHtmlItem(propertyInfo, element);
                 else if (isHtmlMultiItems)
-                {
-                    DeserializeHtmlMultiItems(ref instance, propertyInfo, element);
-                }
+                    propertyValue = DeserializeHtmlMultiItems(propertyInfo, element);
+                if (propertyValue != null)
+                    propertyInfo.SetValue(instance, propertyValue);
             }
             return instance;
         }
@@ -70,89 +72,67 @@ namespace Html2Model
             ).Compile()();
         }
 
-        private static void DeserializeHtmlMultiItems(ref object instance, PropertyInfo propertyInfo, IParentNode element)
+        private static object DeserializeHtmlMultiItems(PropertyInfo propertyInfo, IParentNode element)
         {
             var attributes = propertyInfo.GetCustomAttributes<HtmlMultiItemsAttribute>().Cast<IHtmlItem>().ToList();
             if (attributes?.Any() != true)
                 throw new NullReferenceException();
             var tuple = GetFirstOfDefaultNodes(element, attributes);
             if (tuple.Elements == null || tuple.HtmlItem == null)
-                return;
-            var itemType = ReflectionHelper.GetCollectionItemType(propertyInfo.PropertyType);
-            if (itemType == null) return;
-            var list = new List<object>();
+                return null;
             var converter = CheckForConverter(propertyInfo);
-            foreach (var value in tuple.Elements)
+            var elements = tuple.Elements;
+            var htmlItem = tuple.HtmlItem;
+            var type = propertyInfo.PropertyType;
+            var itemType = ReflectionHelper.GetCollectionItemType(type);
+            if (itemType == null) return null;
+            var list = new List<object>();
+            foreach (var value in elements)
             {
-                object targetValue = null;
-                switch (Type.GetTypeCode(itemType))
-                {
-                    case TypeCode.Boolean:
-                    case TypeCode.Byte:
-                    case TypeCode.Char:
-                    case TypeCode.DateTime:
-                    case TypeCode.Decimal:
-                    case TypeCode.Double:
-                    case TypeCode.Int16:
-                    case TypeCode.Int32:
-                    case TypeCode.Int64:
-                    case TypeCode.SByte:
-                    case TypeCode.Single:
-                    case TypeCode.String:
-                    case TypeCode.UInt16:
-                    case TypeCode.UInt32:
-                    case TypeCode.UInt64:
-                        var text = (string.IsNullOrEmpty(tuple.HtmlItem.Attr) ? value.Text() : value.GetAttribute(tuple.HtmlItem.Attr)).Trim();
-                        if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern) && !string.IsNullOrEmpty(text))
-                            text = Regex.Match(text, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
-                        targetValue = Convert.ChangeType(text, itemType);
-                        break;
-                    case TypeCode.DBNull:
-                    case TypeCode.Empty:
-                        throw new NotSupportedException();
-                    default:
-                        targetValue = DeserializeObject(value, itemType);
-                        break;
-                }
+                var targetValue = GetTargetValue(htmlItem, value, itemType);
                 if (converter != null)
                     targetValue = converter.ReadHtml(value, itemType, targetValue);
                 list.Add(targetValue);
             }
             var targetEnumerable = typeof(Enumerable)
-                .GetMethod("Cast", new[] { typeof(IEnumerable) })
+                .GetMethod("Cast", new[] {typeof(IEnumerable)})
                 .MakeGenericMethod(itemType)
-                .Invoke(null, new object[] { list });
-            if (propertyInfo.PropertyType.IsArray)
-                propertyInfo.SetValue(instance, typeof(Enumerable)
+                .Invoke(null, new object[] {list});
+            if (type.IsArray)
+                return typeof(Enumerable)
                     .GetMethod("ToArray")
                     .MakeGenericMethod(itemType)
-                    .Invoke(null, new[] { targetEnumerable }));
-            else if (typeof(List<>).MakeGenericType(itemType) == propertyInfo.PropertyType)
-                try
-                {
-                    propertyInfo.SetValue(instance, typeof(Enumerable)
-                        .GetMethod("ToList")
-                        .MakeGenericMethod(itemType)
-                        .Invoke(null, new[] { targetEnumerable }));
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                    throw;
-                }
+                    .Invoke(null, new[] {targetEnumerable});
+            if (typeof(List<>).MakeGenericType(itemType) == type)
+                return typeof(Enumerable)
+                    .GetMethod("ToList")
+                    .MakeGenericMethod(itemType)
+                    .Invoke(null, new[] { targetEnumerable });
+            //TODO: More Types
+            return null;
         }
 
-        private static void DeserializeHtmlItem(ref object instance, PropertyInfo propertyInfo, IParentNode element)
+        private static object DeserializeHtmlItem(PropertyInfo propertyInfo, IParentNode element)
         {
             var attributes = propertyInfo.GetCustomAttributes<HtmlItemAttribute>().Cast<IHtmlItem>().ToList();
             if (attributes?.Any() != true)
                 throw new NullReferenceException();
-            object targetValue;
             var tuple = GetFirstOfDefaultNode(element, attributes);
             if (tuple.Element == null || tuple.HtmlItem == null)
-                return;
+                return null;
             var converter = CheckForConverter(propertyInfo);
-            switch (Type.GetTypeCode(propertyInfo.PropertyType))
+            var targetValue = GetTargetValue(tuple.HtmlItem, tuple.Element, propertyInfo.PropertyType);
+            if (converter != null)
+                targetValue = converter.ReadHtml(tuple.Element, propertyInfo.PropertyType, targetValue);
+            return targetValue;
+        }
+
+
+        private static object GetTargetValue(IHtmlItem htmlItem, IElement element, Type targetType)
+        {
+
+            object targetValue = null;
+            switch (Type.GetTypeCode(targetType))
             {
                 case TypeCode.Boolean:
                 case TypeCode.Byte:
@@ -169,23 +149,33 @@ namespace Html2Model
                 case TypeCode.UInt16:
                 case TypeCode.UInt32:
                 case TypeCode.UInt64:
-                    var value = (string.IsNullOrEmpty(tuple.HtmlItem.Attr)
-                        ? tuple.Element.Text()
-                        : tuple.Element.GetAttribute(tuple.HtmlItem.Attr)).Trim();
-                    if (!string.IsNullOrEmpty(tuple.HtmlItem.RegexPattern))
-                        value = Regex.Match(value, tuple.HtmlItem.RegexPattern).Groups[tuple.HtmlItem.RegexGroup].Value;
-                    targetValue = Convert.ChangeType(value, propertyInfo.PropertyType);
+                    try
+                    {
+                        targetValue = Convert.ChangeType(GetValue(htmlItem, element), targetType);
+                    }
+                    catch
+                    {
+                        // ignored
+                    }
                     break;
                 case TypeCode.DBNull:
                 case TypeCode.Empty:
                     throw new NotSupportedException();
                 default:
-                    targetValue = DeserializeObject(tuple.Element, propertyInfo.PropertyType);
+                    targetValue = DeserializeObject(element, targetType);
                     break;
             }
-            if (converter != null)
-                targetValue = converter.ReadHtml(tuple.Element, propertyInfo.PropertyType, targetValue);
-            propertyInfo.SetValue(instance, targetValue);
+            return targetValue;
+        }
+
+        private static string GetValue(IHtmlItem htmlItem, IElement element)
+        {
+            var value = (string.IsNullOrEmpty(htmlItem.Attr)
+                ? element.Text()
+                : element.GetAttribute(htmlItem.Attr)).Trim();
+            if (!string.IsNullOrEmpty(htmlItem.RegexPattern))
+                value = Regex.Match(value, htmlItem.RegexPattern).Groups[htmlItem.RegexGroup].Value;
+            return value;
         }
 
         private static IHtmlConverter CheckForConverter(MemberInfo propertyInfo)
@@ -197,7 +187,8 @@ namespace Html2Model
             return null;
         }
 
-        private static (IElement Element, IHtmlItem HtmlItem) GetFirstOfDefaultNode(IParentNode element, IEnumerable<IHtmlItem> attributes)
+        private static (IElement Element, IHtmlItem HtmlItem) GetFirstOfDefaultNode(IParentNode element,
+            IEnumerable<IHtmlItem> attributes)
         {
             IElement node = null;
             IHtmlItem htmlItem = null;
@@ -212,7 +203,8 @@ namespace Html2Model
         }
 
 
-        private static (IHtmlCollection<IElement> Elements, IHtmlItem HtmlItem) GetFirstOfDefaultNodes(IParentNode element, IEnumerable<IHtmlItem> attributes)
+        private static (IHtmlCollection<IElement> Elements, IHtmlItem HtmlItem) GetFirstOfDefaultNodes(
+            IParentNode element, IEnumerable<IHtmlItem> attributes)
         {
             IHtmlCollection<IElement> node = null;
             IHtmlItem htmlItem = null;
