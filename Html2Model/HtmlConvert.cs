@@ -92,7 +92,8 @@ namespace Html2Model
                 var targetValue = GetTargetValue(htmlItem, value, itemType);
                 if (converter != null)
                     targetValue = converter.ReadHtml(value, itemType, targetValue);
-                list.Add(targetValue);
+                if (targetValue != null)
+                    list.Add(targetValue);
             }
             var targetEnumerable = typeof(Enumerable)
                 .GetMethod("Cast", new[] {typeof(IEnumerable)})

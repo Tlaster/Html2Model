@@ -3,7 +3,7 @@
 namespace Html2Model.Attributes
 {
     [AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
-    public class HtmlMultiItemsAttribute : Attribute, IHtmlItem
+    public sealed class HtmlMultiItemsAttribute : Attribute, IHtmlItem
     {
         public HtmlMultiItemsAttribute(string path)
         {
