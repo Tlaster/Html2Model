@@ -16,17 +16,21 @@ namespace Html2Model
 {
     public static class HtmlConvert
     {
+        private static HtmlParser GetParser()
+        {
+            return new HtmlParser(Configuration.Default.WithCss());
+        }
 
         public static T DeserializeObject<T>(string html)
         {
-            var parser = new HtmlParser();
+            var parser = GetParser();
             var doc = parser.Parse(html);
             return (T) DeserializeObject(doc, typeof(T));
         }
 
         public static object DeserializeObject(string html, Type type)
         {
-            var parser = new HtmlParser(Configuration.Default.WithCss());
+            var parser = GetParser();
             var doc = parser.Parse(html);
             return DeserializeObject(doc, type);
         }
