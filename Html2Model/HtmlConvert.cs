@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Extensions;
 using AngleSharp.Parser.Html;
@@ -25,7 +26,7 @@ namespace Html2Model
 
         public static object DeserializeObject(string html, Type type)
         {
-            var parser = new HtmlParser();
+            var parser = new HtmlParser(Configuration.Default.WithCss());
             var doc = parser.Parse(html);
             return DeserializeObject(doc, type);
         }
