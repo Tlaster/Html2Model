@@ -4,7 +4,9 @@ Batter way to get infomations from html
 
 
 # Getting Start  
-[![NuGet](https://img.shields.io/badge/NuGet%20-1.0.2-blue.svg)](https://www.nuget.org/packages/Html2Model//)
+[![NuGet version](https://badge.fury.io/nu/html2model.svg)](https://badge.fury.io/nu/html2model)
+[![Build status](https://ci.appveyor.com/api/projects/status/m9atk7dqrc54kvwi?svg=true)](https://ci.appveyor.com/project/Tlaster/html2model)
+
 
 # Sample  
 ```C#            
